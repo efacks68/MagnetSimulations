@@ -12,6 +12,7 @@ import sys
 
 #sys.argv[0] = python code name
 #sys.argv[1] must be # of particles
+#sys.argv[2] = '3'  for 3D plot, else for 2D with B
 
 #in order to do several particles (z), do a range and save values to a csv
 w=1 #counter which isn't used elsewhere
@@ -41,7 +42,7 @@ Ef = [0,0,0] #[V/m]
 pos = np.zeros([z,3,n]) #position, velocity, time, energy arrays for graphing
 vels = np.zeros([z,3,n])
 ts = np.zeros([z,n])
-eng = np.zeros([z,n])
+#eng = np.zeros([z,n])
 Bs = np.zeros([z,3,n])
 xprod = np.zeros(3) #needed for cross product calculation
 #for storing values in graphing arrays!
@@ -61,7 +62,7 @@ for w in range(z):
   for j in range(3):
     #Bf[0] = - c.g147 * p1.pos[1]
     #Bf[1] = - c.g147 * p1.pos[0]
-    Bf[j] = Bf[j] + c.dBydx[j]*(p1.pos[j]-p0[j]) #from L4 p13
+    Bf[j] = c.dBydx[j]*(p1.pos[j]-p0[j]) #from L4 p13
   xprod = np.cross(p1.v,Bf)
   #print('v x B =',xprod)
 
@@ -69,35 +70,31 @@ for w in range(z):
   t=0
   i=0
   while t <= s*tinQP:
-    if p1.pos[2] <= c.l: #for 1st QP
+    if p1.pos[2] >= c.qp1start and p1.pos[2] <= c.qp1start+c.l: #for 1st QP
       for j in range(3):
-        Bf[j] = Bf[j] - c.dBydx[j]*(p1.pos[j]-p0[j]) #from L4 p13
+        Bf[j] = c.dBydx[j]*(p1.pos[j]-0) #from L4 p13
       xprod = np.cross(p1.v,Bf)
-    elif p1.pos[2] >= c.l and p1.pos[2] <= c.qp1start: #for drift between QPs
+    elif p1.pos[2] >= c.qp2start and p1.pos[2] <= c.qp2start+c.l:
       for j in range(3):
-        Bf[j] = 0 #from L4 p13
+        Bf[j] = c.dBydx2[j]*(p1.pos[j]-0) #from L4 p13
       xprod = np.cross(p1.v,Bf)
-    elif p1.pos[2] >= c.qp2start and p1.pos[2] <= (c.qp2start+c.l): #for 2nd QP
-      for j in range(3):
-        Bf[j] = Bf[j] - c.dBydx2[j]*(p1.pos[j]-p0[j]) #from L4 p13
-      xprod = np.cross(p1.v,Bf)
-    elif p1.pos[2] > (c.qp2start + c.l): #for drift after QPs
+    else: #and p1.pos[2] <= c.qp1start: #for drift between QPs
       for j in range(3):
         Bf[j] = 0 #from L4 p13
       xprod = np.cross(p1.v,Bf)
-  
+
     for j in range(3): #condense the lines of code
       f[j] = p1.q/p1.m * xprod[j] + p1.q/p1.m * Ef[j] #calculate force at this velocity
-      p1.v[j] = p1.v[j] + f[j] * dt #calculate the velocity change from the force
+      p1.v[j] = p1.v[j] - f[j] * dt #calculate the velocity change from the force
       p1.pos[j] = p1.pos[j] + p1.v[j]*dt #move the particle
 
       #save values before calculations in order to save first ones
       vels[w,j,i] = p1.v[j] #save velocities for Larmor radius calc
       pos[w,j,i] = p1.pos[j] #save positions for graphing
       Bs[w,j,i] = Bf[j] #save Bfield for graphing
-    en = 0.5 * np.sqrt(p1.v[0]**2 + p1.v[1]**2 + p1.v[2]**2)
+    #en = 0.5 * np.sqrt(p1.v[0]**2 + p1.v[1]**2 + p1.v[2]**2)
     ts[w,i] = t #save time before changing
-    eng[w,i] = en
+    #eng[w,i] = en
     t = t + dt
     i = i + 1
   columns += [ts[w],Bs[w,0],Bs[w,1],Bs[w,2],pos[w,0],pos[w,1],pos[w,2]] #stack the values to save
@@ -111,69 +108,58 @@ with open(filename,"a") as f: #append values
   np.savetxt(f,np.column_stack(columns),delimiter=',',fmt='%+.3e') #force +/- and 3 decimals
 
 plottitle = 'Particle through Quadrupole, B0={:.1f}'.format(c.B0*1e6)+r'$/mu$m'
-#define fig outside loop
-from mpl_toolkits.mplot3d import Axes3D
-fig = plt.figure(tight_layout=True,figsize=(12,12))
-s1 = fig.add_subplot(111, projection='3d')
-#fig = plt.figure(figsize=(16,12))
-#plt.subplots_adjust(hspace=0.25,wspace=0.35)
-##s1 = fig.add_subplot(2,2,(1,2)) #4x4 plots
-#s1 = fig.add_subplot(2,3,(1,3)) #6x6 plots
-##s2 = fig.add_subplot(2,2,3) #4x4 plots
-#s2 = fig.add_subplot(2,3,4) #6x6 plots
-##s3 = fig.add_subplot(2,2,4) #4x4 plots
-#s3 = fig.add_subplot(2,3,5) #6x6 plots
-#s4 = fig.add_subplot(2,3,6)
 
-for w in range(z):
-  #plot inside loops to go over the particles
+if sys.argv[2] == '3':
+  #define fig outside loop
+  from mpl_toolkits.mplot3d import Axes3D
+  fig = plt.figure(tight_layout=True,figsize=(12,12))
+  s1 = fig.add_subplot(111, projection='3d')
+  for w in range(z):
+    #plot inside loops to go over the particles
 
-  #3D plot:
-  s1.plot3D(pos[w,2],pos[w,0]*1e6,pos[w,1]*1e6)
+    #3D plot:
+    s1.plot3D(pos[w,2],pos[w,0]*1e6,pos[w,1]*1e6)
+  #add options AFTER plotting
+  s1.grid(visible=True)
+  s1.set_title(r'Particle through Quadrupole, $\frac{d B}{d x,y}$='+'{:.1f}'.format(c.B0*1e6)+r'$\frac{\mu T}{m^2}$',fontsize=24,pad=20)
+  #s1.set_xlabel('Time [ns]',fontsize=20)
+  s1.set_ylabel('Particle X Position [$\mu$m]',fontsize=20,labelpad=10)
+  s1.set_zlabel('Particle Y Position [$\mu$m]',fontsize=20,labelpad=10)
+  s1.set_xlabel('Particle Z Position [m]',fontsize=20,labelpad=10)
+else:
+  fig = plt.figure(figsize=(16,12))
+  plt.subplots_adjust(hspace=0.35,wspace=0.35)
+  s1 = fig.add_subplot(2,2,(1,2)) #4x4 plots
+  s1b = s1.twinx()
+  #s1 = fig.add_subplot(2,3,(1,3)) #6x6 plots
+  s2 = fig.add_subplot(2,2,(3,4)) #4x4 plots
+  s2b = s2.twinx()
 
-  #2Dplots
-  #s1.plot(ts[w]*1e9,pos[w,0]*1e6,label='X{:d}'.format(w))
-  #s1.plot(ts[w]*1e9,pos[w,1]*1e6,label='Y{:d}'.format(w))
+  for w in range(z):
+    #plot inside loops to go over the particles
+    #2Dplots
+    s1.plot(pos[w,2],pos[w,0]*1e6,'b',label='X{:d}'.format(w))
+    #s1a.plot(pos[w,2],fs[w,0],'r',label='Force X')
+    s1b.plot(pos[w,2],Bs[w,0]*1e6,'g',label='B_x')
+    #s1.plot(pos[w,2],pos[w,1]*1e6,label='Y{:d}'.format(w))
+    
+    s2.plot(pos[w,2],pos[w,1]*1e6,'b',label='Y{:d}'.format(w))
+    s2b.plot(pos[w,2],Bs[w,1]*1e6,'g',label='B_y')
+  #add options AFTER plotting
+  s1.grid(visible=True)
+  s1.set_title(r'Particle through Quadrupole, $\frac{d B}{d x,y}$='+'{:.1f}'.format(c.B0*1e6)+r'$\frac{\mu T}{m^2}$',fontsize=24,pad=20)
+  s1.set_ylabel('Particle X [$\mu$m]',fontsize=20,labelpad=10)
+  #s1.set_zlabel('Particle Y Position [$\mu$m]',fontsize=20,labelpad=10)
+  s1.set_xlabel('Particle Z Position [m]',fontsize=20,labelpad=10)
+  s1b.set_ylabel('Magnetic Field \n[$\mu$T/m]',fontsize=20,labelpad=10)
+  #s1.legend(loc='lower left',bbox_to_anchor=(-0.01,0.1),frameon=False)
+  #s1.text(-0.5,440,,fontsize=20)
   
-  #s2.plot(pos[w,2],pos[w,0]*1e6)
-  
-  #s3.plot(pos[w,2],pos[w,1]*1e6)
+  s2.set_xlabel('Particle Z Position [m]',fontsize=20)
+  s2.set_ylabel('Particle Y [$\mu$m]',fontsize=20)
+  s2b.set_ylabel('Magnetic Field \n[$\mu$T/m]',fontsize=20,labelpad=10)
+  s2.grid(visible=True)
 
-  #s1.plot(ts*1e6,pos[2]*1e6,'r.',label='Z')
-  #print(ts[w,4],pos[w,0,4])
-  #s2.plot(pos[0]*1e6,pos[1]*1e6)
-  #s4.plot(ts*1e9,eng)
-  #s4.grid(visible=True)
-  #s4.set_xlabel('Time [ns]',fontsize=20)
-  #s4.set_ylabel('Energy [eV]',fontsize=20)
-
-  #s4 = fig.add_subplot(2,3,6) #attempt at plotting B, WIP
-  #s4.plot(pos[2],Bf[0])
-  #s4.plot(pos[2],Bf[1])
-  #s4.grid(visible=True)
-  #s4.set_xlabel('Z Position [m]',fontsize=20)
-  #s4.set_ylabel('Magnetic Field [T/m]',fontsize=20)
-
-#add options AFTER plotting
-s1.grid(visible=True)
-s1.set_title(r'Particle through Quadrupole, $\frac{d B}{d x,y}$='+'{:.1f}'.format(c.B0*1e6)+r'$\frac{\mu T}{m^2}$',fontsize=24,pad=20)
-#s1.set_xlabel('Time [ns]',fontsize=20)
-s1.set_ylabel('Particle X Position [$\mu$m]',fontsize=20,labelpad=10)
-s1.set_zlabel('Particle Y Position [$\mu$m]',fontsize=20,labelpad=10)
-s1.set_xlabel('Particle Z Position [m]',fontsize=20,labelpad=10)
-#s1.legend(loc='lower left',bbox_to_anchor=(-0.01,0.1),frameon=False)
-#s1.text(-0.5,440,,fontsize=20)
-
-#s2.set_xlabel('Particle X Position [$\mu$m]',fontsize=20)
-#s2.set_xlabel('Particle Z Position [m]',fontsize=20)
-#s2.set_ylabel('Particle X Position [$\mu$m]',fontsize=20)
-#s2.grid(visible=True)
-
-#s3.set_xlabel('Particle Z Position [m]',fontsize=20)
-#s3.set_ylabel('Particle Y Position [$\mu$m]',fontsize=20)
-#s3.grid(visible=True)
-
-#print(np.mean(eng))
 savename='../pictures/FODO_{:.0f}ns_{:.0f}e_P0x{:.1f},y{:.1f}um_{:.1f}mTm-2__N{:d}_p{:d}.pdf'.format(t*1e9,p1.q*1/c.e,pos[0,0,0]*1e6,pos[0,1,0]*1e6,c.B0*1e3,N,z)
 print(savename)
 #plt.savefig(savename)
